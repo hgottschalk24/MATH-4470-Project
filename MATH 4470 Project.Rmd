@@ -43,11 +43,240 @@ nrow(nhl)
 ```
 
 # 1.
-Why this data?: Counting stats (goals, points, hits) are bounded below by 0, so they should be right-skewed. That makes the data a natural fit for reexpression and resistant methods.
 
-Continous Variables: Age, GP (Games Played), G (Goals), A (Assists), PTS (Points), +/- (Plus/Minus), PIM (Penalties in Minutes), EVG (Even Strength Goals), PPG (Power Play Goals), SHG (Shorthanded Goals), GWG (Game-Winning Goals), EV (Even Strength Assists), PP (Power Play Assists), SH (Shorthand Assists), SOG (Shots on Goal), SPCT (Shooting Percentage), TSA (Total Shots Attempted), TOI (Time on Ice, in minutes), ATOI (Avg time on ice, in minutes), FOW (Faceoff Wins), FOL (Faceoff Losses), FO% (Faceoff Percentage), BLK (Blocks), HIT (Hits), TAKE (Takeaways), GIVE (Giveaways)
+**Source:** Hockey-Reference https://www.hockey-reference.com/leagues/NHL_2026_skaters.html 
+**Description:** This dataset contains the top 100 player stats for the 2025-2026 NHL season. This includes their age, team, position, scoring stats (G, A, Pts, +/-, PIM), goal related stats (PPG, SHG, GWG), assists (EV, PP, SH), shots (SOG), ice-time, and face-offs. I think it will be interesting to explore this dataset when broken down by each stat, and to see if any of the stats relate to each other. I think it will also be interesting to see this dataset explored by position of the player as well.
+**Why this data?:** Counting stats (goals, points, hits) are bounded below by 0, so they should be right-skewed. That makes the data a natural fit for reexpression and resistant methods.
 
-Categorical Variables: Player, Team, Pos (Position)
+**Continous Variables:** Age, GP (Games Played), G (Goals), A (Assists), PTS (Points), +/- (Plus/Minus), PIM (Penalties in Minutes), EVG (Even Strength Goals), PPG (Power Play Goals), SHG (Shorthanded Goals), GWG (Game-Winning Goals), EV (Even Strength Assists), PP (Power Play Assists), SH (Shorthand Assists), SOG (Shots on Goal), SPCT (Shooting Percentage), TSA (Total Shots Attempted), TOI (Time on Ice, in minutes), ATOI (Avg time on ice, in minutes), FOW (Faceoff Wins), FOL (Faceoff Losses), FO% (Faceoff Percentage), BLK (Blocks), HIT (Hits), TAKE (Takeaways), GIVE (Giveaways)
+**Categorical Variables:** Player, Team, Pos (Position)
+
+
+# 2.
+
+*What does a typical player's point total look like, and who are the outliers?*
+```{r}
+ggplot(nhl, aes(PTS)) + geom_histogram(binwidth = 5, color = "black", fill = "pink")
+aplpack::stem.leaf(nhl$PTS)
+
+# Letter values
+lv <- lval(nhl$PTS); lv
+fivenum(nhl$PTS)
+
+# Fences and outliers
+FL <- lv["H", "lo"]; FU <- lv["H", "hi"]; dF <- FU - FL
+fences <- c(FL - 1.5 * dF, FU + 1.5 * dF)
+fences
+nhl %>% filter(PTS > fences[2] | PTS < fences[1]) %>%
+  select(Player, Team, Pos, PTS) %>% arrange(desc(PTS))
+
+# Symmetry checks
+lv$mids # increasing midsummaries = right skew
+hinkley(nhl$PTS) # d > 0 = right skew
+symplot(nhl$PTS) # points above the line = right skew
+
+# Reexpress down the ladder of powers and re-check
+ladder <- c(`1` = 1, `0.5` = 0.5, `0` = 0, `-0.5` = -0.5, `-1` = -1)
+sapply(ladder, function(p) {
+  z <- if (p == 0) log(nhl$PTS) else if (p < 0) -nhl$PTS^p else nhl$PTS^p
+  hinkley(z)
+})
+
+z <- -nhl$PTS^(-0.5)
+aplpack::stem.leaf(round(z, 3))
+hinkley(z)
+lval(z)$mids
+```
+
+A Typical player scores about 70 points (median 70.5), and the middle half of players fall between 62 and 80. The distribution is right-skewed. The mudsummaries climb from 70.5 to 97.5, and Hinley's h is positive (0.19). 4 players are above the upper fence of 107: McDavid (138), Kucherov (130), MacKinnon (127), and Celebrini (115). Reexpressing shrinks the skew (h falls from 0.19 to 0.08 at p = -0.5) but never reaches 0. That is because this is only the top 100 scoreres and the lowest total is 57, so I'd say the data can't be fully symmetrized.
+
+*Do forwards and defensemen differ in scoring? Are the spreads unequal?*
+```{r}
+# Boxplots ordered by median
+ggplot(nhl, aes(reorder(Pos3, PTS, median), PTS)) +
+  geom_boxplot() + coord_flip() + xlab("Position")
+
+# Medians and fourth-spreads for each group
+nhl %>% group_by(Pos3) %>%
+  summarize(n = n(), Median = median(PTS), Spread = IQR(PTS))
+
+# Is spread tied to level?
+spread_level_plot(nhl, PTS, Pos3)
+# Slope b printed in the title -> suggested power p = 1 - b
+
+# Reexpress using the suggested power 
+nhl <- nhl %>% mutate(PTS_new = PTS^(1/3))
+
+ggplot(nhl, aes(reorder(Pos3, PTS_new, median), PTS_new)) +
+  geom_boxplot() + coord_flip() + xlab("Position")
+
+nhl %>% group_by(Pos3) %>% summarize(Spread_new = IQR(PTS_new)) %>%
+  summarize(ratio_largest_to_smallest = max(Spread_new) / min(Spread_new))
+```
+
+Wingers have the highest median (73), then centers (68.5), then defensemen (64.5). Forwards score roughly 4 to 8 points more than defensemen at the median, but the boxes overlap heavily. The spreads are similar (fourth-spreads of about 18.5, 17.8, and 16.5). The spread-level slope of 0.68 suggests a cube root, but it changed the spread ratio only slightly (1.12 to 1.06), so reexpression barely matters. With only 16 defensement, the defense median is less certain.
+
+*Shots vs. goals, and ice time vs. points*
+```{r}
+# Three summary points
+three_pts <- function(df, xvar, yvar) {
+  df %>%
+    mutate(grp = ntile({{ xvar }}, 3)) %>%
+    group_by(grp) %>%
+    summarize(x = median({{ xvar }}), y = median({{ yvar }}), .groups = "drop") %>%
+    select(x, y) %>% as.data.frame()
+}
+
+# transform the summary points and get the half-slope ratio
+straightening.work <- function(sp, px, py) {
+  sp$tx <- with(sp, (x ^ px - 1) / px)
+  sp$ty <- with(sp, (y ^ py - 1) / py)
+  sp$slope[1] <- with(sp, diff(ty[1:2]) / diff(tx[1:2]))
+  sp$slope[2] <- with(sp, diff(ty[2:3]) / diff(tx[2:3]))
+  sp$half.slope.ratio <- with(sp, slope[2] / slope[1])
+  sp$slope[3] <- NA
+  sp$half.slope.ratio[2:3] <- NA
+  row.names(sp) <- c("Left", "Center", "Right")
+  sp
+}
+```
+
+*Shots on goal vs. goals, who over or under performs?*
+```{r}
+nhl_df <- as.data.frame(nhl)
+
+ggplot(nhl, aes(SOG, G)) + geom_point() + geom_smooth(method = "loess", se = FALSE)
+
+sp <- three_pts(nhl_df, SOG, G)
+straightening.work(sp, 1, 1)
+
+# Resistant line 
+fit_sog <- rline(G ~ SOG, nhl_df, iter = 5)
+c(a = fit_sog$a, b = fit_sog$b, xC = fit_sog$xC)
+coef(lm(G ~ SOG, nhl))
+cor(nhl$SOG, nhl$G)
+
+a  <- as.numeric(unlist(fit_sog$a))
+b  <- as.numeric(unlist(fit_sog$b))
+xC <- as.numeric(unlist(fit_sog$xC))
+c(rline_intercept = a - b * xC, rline_slope = b)
+coef(lm(G ~ SOG, nhl))
+
+nhl <- nhl %>%
+  mutate(Fit_G   = a + b * (SOG - xC),
+         Resid_G = G - Fit_G)
+
+nhl %>% slice_max(Resid_G, n = 5) %>% select(Player, Pos, SOG, G, SPCT, Resid_G)
+nhl %>% slice_min(Resid_G, n = 5) %>% select(Player, Pos, SOG, G, SPCT, Resid_G)
+
+ggplot(nhl, aes(SOG, Resid_G, color = Group2)) + geom_point() + geom_hline(yintercept = 0)
+```
+
+Shots and goals are moderately strongly related (r = 0.65). The resistant line says each extra shot is worth about 0.13 goals, or one goal per 8 shots. Least squares gives nearly the same slope (0.135). Over performers are Johnston, Caulfield, Geekie, Stamkos, and Kucherov. All shoot about 19-22%, well above what their shot volume predicts. The five biggest under performers are all defensement (Hughes, Seider, Werenski, Sergachev, LaCombe), with shooting percentages of 4-9%. So position explains much of the residual pattern. These are mostly defensemen shooting from distance, not unlucky forwards.
+
+*Does ice time predict points?*
+```{r}
+nhl_df <- as.data.frame(nhl)
+
+ggplot(nhl, aes(ATOI_min, PTS)) + geom_point() + geom_smooth(method = "loess", se = FALSE)
+
+sp2 <- three_pts(nhl_df, ATOI_min, PTS)
+straightening.work(sp2, 1, 1)
+
+fit_toi <- rline(PTS ~ ATOI_min, nhl_df, iter = 5)
+c(a = fit_toi$a, b = fit_toi$b, xC = fit_toi$xC)
+cor(nhl$ATOI_min, nhl$PTS)
+
+a2  <- as.numeric(unlist(fit_toi$a))
+b2  <- as.numeric(unlist(fit_toi$b))
+xC2 <- as.numeric(unlist(fit_toi$xC))
+
+nhl <- nhl %>%
+  mutate(Fit_PTS   = a2 + b2 * (ATOI_min - xC2),
+         Resid_PTS = PTS - Fit_PTS)
+
+# Does position explain the leftover pattern? (defensemen have more ice time)
+ggplot(nhl, aes(Pos3, Resid_PTS)) + geom_boxplot() + geom_hline(yintercept = 0, color = "red")
+nhl %>% slice_max(Resid_PTS, n = 5) %>% select(Player, Pos, ATOI_min, PTS, Resid_PTS)
+nhl %>% slice_min(Resid_PTS, n = 5) %>% select(Player, Pos, ATOI_min, PTS, Resid_PTS)
+
+fwd <- nhl_df %>% filter(Group2 == "Forward")
+straightening.work(three_pts(fwd, ATOI_min, PTS), 1, 1)
+fit_fwd <- rline(PTS ~ ATOI_min, fwd, iter = 5)
+c(slope = as.numeric(unlist(fit_fwd$b)))
+cor(fwd$ATOI_min, fwd$PTS)
+ggplot(fwd, aes(ATOI_min, PTS)) + geom_point() + geom_smooth(method = "loess", se = FALSE)
+```
+
+For all players, only weakly (r = 0.27). The curve rises to about 21 minutes and then falls. The drop comes from defensemen, who play roughly 24+ minutes but score less. They have the most negative residuals. Among forwards, the relationship is much stronger (r = 0.66), at roughly 7 extra points per extra minute of ice time. The forward relationship bends upward (half-slope ratio 2.27), because the stars (McDavid, Kucherov, MacKinnon) both play more and score far more.
+
+*How does production change with age?*
+```{r}
+ggplot(nhl, aes(Age, PTS)) + geom_point() + geom_smooth(method = "loess", se = FALSE)
+
+ggplot(nhl, aes(AgeGroup, PTS)) + geom_boxplot() + coord_flip()
+
+nhl %>% group_by(AgeGroup) %>%
+  summarize(n = n(), Median = median(PTS), Spread = IQR(PTS))
+```
+
+There is no strong age trend. Median points are 69 (less than or equal to age 22), 68 (ages 23-26), 72 (ages 27-30), and 66 (greater than age 31). Production peaks slightly in the late 20s, and the 31+ group has the lowest median and the tightest spread. Each difference is only a few points, small compared to the spread of about 15 points within each age group.
+
+*Do position and age both shape production? is it additive?*
+```{r}
+# How many players are in each cell? (small cells = shaky medians)
+table(nhl$Pos3, nhl$AgeGroup)
+
+tab <- nhl %>%
+  group_by(Pos3, AgeGroup) %>% summarize(M = median(PTS), .groups = "drop") %>%
+  pivot_wider(names_from = AgeGroup, values_from = M) %>%
+  as.data.frame() %>% column_to_rownames("Pos3") %>% as.matrix()
+tab <- tab[, levels(nhl$AgeGroup)]
+tab
+
+# Additive fit
+pp <- medpolish(tab)
+pp
+
+# Additive fit plot
+plot2way(pp$row + pp$overall, pp$col, rownames(tab), colnames(tab))
+
+# Are the effects big compared to the residuals?
+round(c(row = range(pp$row), col = range(pp$col), resid = range(pp$residuals)), 2)
+
+# Comparison values
+cv <- outer(pp$row, pp$col, "*") / pp$overall
+df <- data.frame(cv = as.vector(cv), resid = as.vector(pp$residuals))
+ggplot(df, aes(cv, resid)) + geom_point() + geom_hline(yintercept = 0)
+```
+
+The common value is about 68 points. Position effects are tiny (center -0.3, defensemen 0, wings +2.6). Age effects are larger: 31+ is -4.9, and ages 27-30 is +1.9. So age matters somewhat more than position here, and neither is big. The residuals go up to +9.8 (31+ centers) and +4.6 (27-30 wings). These are larger than the effects, so the additive model explains little of the table. Cells are small (defensemen only have 2 players in the less than or equal to age 22 and in the 31+ groups), so conclusions are just exploratory. The comparison-value step was unstable, so I'd stay with the additive fit.
+
+*How well does a normal curve describe ice time, and where does it fail?*
+```{r}
+gaussian_check <- function(x, width = 1) {
+  lvx <- lval(x)
+  FL <- lvx["H", "lo"]; FU <- lvx["H", "hi"]
+  m <- (FU + FL) / 2
+  s <- (FU - FL) / 1.349
+  bins <- seq(floor(min(x)) - width, ceiling(max(x)) + width, by = width)
+  g <- fit.gaussian(x, bins, m, s)
+  mids <- (bins[-1] + bins[-length(bins)]) / 2
+  print(c(mean_fit = m, sd_fit = s))
+  print(data.frame(Mid = mids, d = g$counts, e = round(g$expected, 1),
+                   sqrt_d = round(sqrt(g$counts), 2),
+                   resid = round(sqrt(g$counts) - sqrt(g$expected), 2)))
+  rootogram(g$counts, g$expected)
+  rootogram(g$counts, g$expected, type = "deviation")
+}
+
+hist(nhl$ATOI_min, breaks = 12)
+gaussian_check(nhl$ATOI_min, width = 1)
+
+gaussian_check(nhl$ATOI_min[nhl$Group2 == "Forward"], width = 1)
+```
+
+For all players, a normal curve (mean about 19.8, SD about 2.2) fits the middle well. It fails at 24.5 minutes, where there are 7 players but only 2 are expected (that's the defensemen). It also has too few players at 21.5-22.5 minutes and none at 14.5. For forwards only (mean 19.2, SD 1.7), the fit is much better. Nearly every root residual si within +-0.4. So ice time is a mixture of two groups: forwards are close to normal, and defensemen form a second bump at around 24+ minutes. 
 
 
 # 3. Methods and Interpretation
