@@ -13,8 +13,9 @@ How strongly are shots on goal related to goals? Which players score more or les
 Does ice time (ATOI) predict points?
 How does production change with age?
 Do position and age group both shape production, and is the effect additive?
+How well does a normal curve describe the distribution of ice time, and where does it fail?
 
-3. Methods and Interpretation
+4. Methods and Interpretation
 Interpret each result in hockey terms. The EDA is a tool, not the story.
 
 A. Single batch: PTS (Q1)
@@ -23,6 +24,8 @@ Letter values, midsummaries, five-number summary, fourth-spread
 Fences and outliers
 Mean vs. median, and a symmetry check with Hinkley’s d, a midsummary plot, and a symmetry plot
 Reexpress with roots/logs and re-check symmetry. Handle zero-point players, e.g., use √(PTS + 0.5) as in the home-run example.
+Bin ATOI (ice time) and make a rootogram with a resistant Gaussian fit, using mean = (F_U + F_L)/2 and s = (F_U − F_L)/1.349.
+Make it a hanging rootogram and interpret the residuals in hockey terms (e.g., too few or too many players in certain ice-time ranges, reflecting how lineups are built).
 
 B. Comparing batches: PTS by position (Q2)
 Parallel boxplots, ordered by median
