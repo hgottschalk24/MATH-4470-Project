@@ -9,22 +9,181 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# 3. Methods and Interpretation
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## a) Single batch
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+**i) Stemplots** 
 
-```{r cars}
-summary(cars)
+The first stemplot breaks at the tens place with 5 leaves per stem. The four largest values are listed on a separate HI line so they don't stretch the display.
+
+```{r}
+aplpack::stem.leaf(nhl$PTS, unit = 1, m = 2)
 ```
 
-## Including Plots
+The second version uses 10 leaves per stem:
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+aplpack::stem.leaf(nhl$PTS, unit = 1, m = 1)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+The first stemplot looks better compared to the second one which squeezes most of the data onto three lines. 
+
+
+
+**ii) Letter values, the five-number summary, and outliers.**
+
+```{r}
+lval(nhl$PTS)
+fivenum(nhl$PTS)
+FL <- 62; FU <- 80; STEP <- 1.5 * (FU - FL)
+c(inner.lo = FL - STEP, inner.hi = FU + STEP,
+  outer.lo = FL - 2 * STEP, outer.hi = FU + 2 * STEP)
+filter(nhl, PTS > FU + STEP) %>% select(Player, Team, GP, PTS)
+```
+
+- **Value and spread:** The median is $M = 70.5$ points and the fourths are 62 and 80. Half of these players scored between 62 and 80 points, so the fourth-spread is $d_F = 18$.
+
+- **Shape:** The mids increase steadily from 70.5 to 71, 74.5, 79, 86, 92.75 and finally 97.5 at the extremes. That is right skew, and it grows stronger toward the tails.
+
+- **Outliers:** The step is 27, so the inner fences are 35 and 107.
+
+- Nobody is beyond the low fences, because the low end of the data is cut off at 57.
+
+**iii) Mean vs. median, and checking symmetry.**
+
+```{r}
+c(mean = mean(nhl$PTS), median = median(nhl$PTS))
+pts.lv <- lval(nhl$PTS)
+pts.lv %>% mutate(LV = 1:nrow(pts.lv)) %>%
+  ggplot(aes(LV, mids)) + geom_point() + ggtitle("Midsummaries: Raw PTS")
+symplot(nhl$PTS)
+hinkley(nhl$PTS)
+```
+
+The mean is larger than the median, which is what we expect for right-skewed data. The superstars pull the mean up, but they don't affect the median. Hinkley's $d = 0.19$ is positive. In the symmetry plot, almost all of the points fall above the line $u = v$, and they move farther above it toward the right. That means right skew mostly in the tails.
+
+**iv) Reexpression.** 
+```{r reexp-pts}
+pts.re <- data.frame(power = c("1 (raw)", "0.5 (roots)", "0 (logs)",
+                               "-0.5", "-1"),
+  hinkley.d = c(hinkley(nhl$PTS), hinkley(sqrt(nhl$PTS)),
+                hinkley(log10(nhl$PTS)), hinkley(-1 / sqrt(nhl$PTS)),
+                hinkley(-1 / nhl$PTS)))
+pts.re
+lval(log10(nhl$PTS))
+```
+
+Hinkley's $d$ gets smaller as we go down the ladder. 0.19 for raw data, then 0.15, 0.11, 0.08, and 0.04. Even the reciprocals, p=1, still leaves the batch right-skewed, and the mids of the logs still increase. 
+
+Reexpression does not make this batch symmetric. Reexpression helps most when HI/LO is large, and here HI/LO = 138/57 = 2.4, which is small. 
+
+**iv) Matched transformations.** 
+We matched the roots and logs to the raw data at the median, so the three batches can be compared on the same scale.
+
+```{r}
+raw <- nhl$PTS
+matched.roots <- mtrans(raw, 0.5)
+matched.logs <- mtrans(raw, 0)
+boxplot(data.frame(raw, matched.roots, matched.logs))
+```
+
+In all three boxplots, the middle half is fairly balanced, but the upper whisker is much longer than the lower one and the outliers are all at the high end. The roots and logs pull in the long right tail a little, but they don't remove the skewness. This agrees with Hinkley's $d$.
+
+
+### Binned data: ice time (ATOI)
+With 100 players, we grouped the average ice times ( minutes per game) into bins and compared the bin counts with a Gaussian curve.
+
+#### i) Constructing a histogram
+
+The ice times range from 15.2 to 27.7 minutes, so we used bins of width 1 minute from 14 to 28.
+
+```{r}
+bins <- seq(14, 28, 1)
+bin.mids <- (bins[-1] + bins[-length(bins)]) / 2
+ggplot(nhl, aes(ATOI.min)) +
+  geom_histogram(breaks = bins,
+                 fill = "white",
+                 color = "red") +
+  xlab("Average time on ice")
+```
+
+Most players have 17-21 minutes a night. The counts drop off at 21-23 minutes, and then there is a second, smaller group at 23-26 minutes.
+Large counts vary more than small counts, so it is hard to compare this histogram with a normal curve by eye. We can therefore implement a rootogram.
+
+####ii) A rootogram
+
+```{r}
+p <- ggplot(nhl, aes(ATOI.min)) +
+     geom_histogram(breaks = bins)
+out <- ggplot_build(p)$data[[1]]
+select(out, count, x, xmin, xmax)
+ggplot(out, aes(x, sqrt(count))) +
+  geom_col() + xlab("Average time on ice (minutes)")
+```
+
+#### iii) Fitting a Gaussian comparison curve
+
+We matched the Gaussian curve using the fourths:
+
+```{r}
+fivenum(nhl$ATOI.min)
+```
+
+$$
+m = \frac{F_U + F_L}{2} = \frac{21.30 + 18.27}{2} = 19.78, \qquad
+s = \frac{F_U - F_L}{1.349} = \frac{21.30 - 18.27}{1.349} = 2.25.
+$$
+
+So the matching Gaussian curve is N(19.78, 2.25).
+
+```{r}
+s <- fit.gaussian(nhl$ATOI.min, bins, 19.78, 2.25)
+options(digits=3)
+(df <- data.frame(Mid=bin.mids, d=s$counts, sqrt.d=sqrt(s$counts),
+           Prob=s$probs, e=s$expected, sqrt.e=sqrt(s$expected),
+           Residual=s$residual))
+options(digits=7)
+```
+
+```{r}
+ggplot(out, aes(x, sqrt(count))) +
+  geom_col() +
+  geom_line(data = df,
+            aes(bin.mids, sqrt.e), color="red") +
+  xlab("Average time on ice (minutes)")
+```
+
+#### iv) Hanging rootogram
+
+```{r}
+library(vcd)
+rootogram(s$counts, s$expected)
+rootogram(s$counts, s$expected, type="deviation")
+```
+
+The bars that fall below the line at 0 are positive residuals (more players than the curve expects), and the bars that stay above the line are negative residuals. 
+
+Double-root residuals:
+
+```{r}
+DRR <- sqrt(2 + 4 * s$counts) - sqrt(1 + 4 * s$expected)
+data.frame(Mid = bin.mids, d = s$counts, e = round(s$expected, 1),
+           DRR = round(DRR, 2))
+```
+
+To see who is in each ice-time range, we counted the players by position:
+
+```{r}
+table(cut(nhl$ATOI.min, bins), nhl$Group)
+```
+
+
+The normal curve does not fit ice time well, and that shows how NHL lineups are built.
+
+- **There are too many players at 17-19 minutes:** Residuals are between +0.35 and +0.60, and the double-root residual is 1.25. This is where the forwards pile up. Every player in these bins is a forward. Coaches rotate forward lines in short shifts, so most top forwards end up with very similar minutes.
+- **There are too few players at 21-23 minutes:** Residuals are between -0.81 and -0.93, and the double-root residuals are between -1.50 and -1.70. This is the gap between the forwards and the defensemen. Only the busiest forwards reach 21 minutes, and only one defenseman plays less than 23.
+- **There are too many players at 24-28 minutes:** The 24-25 bin has 7 players when the curve expects 2.0, double-root residual is 2.46, the largest in the table. These are the defensemen. Defense pairs stay on the ice longer, and the top pair on a team can play 25+ minutes a night. Every player above 23 minutes is a defenseman.
+- **No one is below 15 minutes**, where the curve expects about 1 player. Players with low ice time rarely score enough to make the top 100 list.
+
+So ice time is really two batches mixed together, forwards and defensemen, and a single bell curve can't describe them both.
