@@ -9,6 +9,47 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+hockey_raw <- read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQTBI7pzxPLxuznDOMiJrsTsJjl2vKFkReRdVNpJtkVF8oFfEmJzRMMuxZU9ox4BNqf3uoWWpfq6LBW/pub?output=csv")
+names(hockey_raw)[1] <- "Rk"
+head(hockey_raw)
+```
+
+```{r}
+library(tidyverse)
+library(aplpack)
+library(LearnEDAfunctions)
+library(vcd)   
+```
+
+# CLEANING
+```{r}
+to_min <- function(x) {
+  map_dbl(strsplit(as.character(x), ":"),
+          ~ as.numeric(.x[1]) + as.numeric(.x[2]) / 60)
+}
+
+nhl <- hockey_raw %>%
+  group_by(Rk) %>% slice(1) %>% ungroup() %>%      # one row per player
+  mutate(
+    ATOI_min = to_min(ATOI),
+    Pos3     = case_when(Pos == "D" ~ "D", Pos == "C" ~ "C", TRUE ~ "Wing"),
+    Group2   = ifelse(Pos == "D", "Defense", "Forward"),
+    AgeGroup = cut(Age, c(0, 22, 26, 30, Inf),
+                   labels = c("<=22", "23-26", "27-30", "31+"))
+  )
+
+nrow(nhl)
+```
+
+# 1.
+Why this data?: Counting stats (goals, points, hits) are bounded below by 0, so they should be right-skewed. That makes the data a natural fit for reexpression and resistant methods.
+
+Continous Variables: Age, GP (Games Played), G (Goals), A (Assists), PTS (Points), +/- (Plus/Minus), PIM (Penalties in Minutes), EVG (Even Strength Goals), PPG (Power Play Goals), SHG (Shorthanded Goals), GWG (Game-Winning Goals), EV (Even Strength Assists), PP (Power Play Assists), SH (Shorthand Assists), SOG (Shots on Goal), SPCT (Shooting Percentage), TSA (Total Shots Attempted), TOI (Time on Ice, in minutes), ATOI (Avg time on ice, in minutes), FOW (Faceoff Wins), FOL (Faceoff Losses), FO% (Faceoff Percentage), BLK (Blocks), HIT (Hits), TAKE (Takeaways), GIVE (Giveaways)
+
+Categorical Variables: Player, Team, Pos (Position)
+
+
 # 3. Methods and Interpretation
 
 ## a) Single batch
