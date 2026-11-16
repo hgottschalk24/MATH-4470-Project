@@ -457,3 +457,199 @@ The normal curve does not fit ice time well, and that shows how NHL lineups are 
 - **No one is below 15 minutes**, where the curve expects about 1 player. Players with low ice time rarely score enough to make the top 100 list.
 
 So ice time is really two batches mixed together, forwards and defensemen, and a single bell curve can't describe them both.
+## b). Comparing batches
+
+#### a) Raw data: 5-number summaries and fences
+
+```{r}
+nhl %>%
+  group_by(Group) %>%
+  summarize(N  = n(),
+            LO = fivenum(PTS)[1],
+            FL = fivenum(PTS)[2],
+            M  = fivenum(PTS)[3],
+            FU = fivenum(PTS)[4],
+            HI = fivenum(PTS)[5]) %>%
+  mutate(dF = FU - FL,
+         STEP = 1.5 * dF,
+         fence.lo = FL - STEP,
+         fence.hi = FU + STEP) -> pts.summary
+pts.summary
+```
+
+#### b) Raw data: outside values
+
+```{r}
+nhl %>%
+  inner_join(pts.summary, by = "Group") %>%
+  filter(PTS < fence.lo | PTS > fence.hi) %>%
+  select(Group, Player, PTS)
+```
+
+#### c) Raw data: parallel boxplots
+
+```{r}
+ggplot(nhl, aes(reorder(Group, PTS, median), PTS)) +
+  geom_boxplot() + coord_flip() +
+  xlab("Position") + ylab("Points")
+```
+
+The spreads are nearly equal, with fourth spreads of 20, 19, and 17 points. When batches have similar spreads, we can compare them using medians: add the the spread vs. level plot
+$$
+W = C + 2, \qquad D = C - 5.5.
+$$
+
+
+#### Comparing the positions
+
+i) **Level:** In total points, the positions are closer than most fans would guess. Wingers median is 72 and centers is 70 are nearly the same. The median defenseman on this list (64.5) has only 5.5 fewer points than the median center.
+
+ii) **Spread:** The spreads are almost the same, so no reexpression is needed for points.
+
+iii) **Shape:** All three batches are right-skewed. Each one starts near 57, where the top-100 list cuts off, and has a longer upper whisker.
+
+iv) **Unusual values:**The four outside values are all forwards.
+
+**How the positions score.** The real difference between positions is *how* they score. A typical defenseman gets about 78% of his points from assists, while centers and wingers get about 59%. Defensemen also score about half as many goals as forwards (medians of 14.5 and about 30).
+
+```{r}
+ggplot(nhl, aes(reorder(Group, A / PTS, median), A / PTS)) +
+  geom_boxplot() + coord_flip() +
+  xlab("Position") + ylab("Share of points from assists")
+```
+
+### Blocked shots by position
+
+#### a) Raw data: 5-number summaries and fences
+
+```{r}
+nhl %>%
+  group_by(Group) %>%
+  summarize(N  = n(),
+            LO = fivenum(BLK)[1],
+            FL = fivenum(BLK)[2],
+            M  = fivenum(BLK)[3],
+            FU = fivenum(BLK)[4],
+            HI = fivenum(BLK)[5]) %>%
+  mutate(dF = FU - FL,
+         STEP = 1.5 * dF,
+         fence.lo = FL - STEP,
+         fence.hi = FU + STEP) -> blk.summary
+blk.summary
+```
+
+#### b) Raw data: outside values
+
+```{r}
+nhl %>%
+  inner_join(blk.summary, by = "Group") %>%
+  filter(BLK < fence.lo | BLK > fence.hi) %>%
+  select(Group, Player, BLK)
+```
+
+#### c) Raw data: parallel boxplots
+
+```{r}
+ggplot(nhl, aes(reorder(Group, BLK, median), BLK)) +
+  geom_boxplot() + coord_flip() +
+  xlab("Position") + ylab("Blocked shots")
+```
+
+The defensemen's box is far to the right and much wider than the boxes for centers and wingers, so spread increases with level.
+
+#### Spread vs. level plot
+
+```{r}
+spread_level_plot(nhl, BLK, Group)
+```
+
+There is a positive association between $\log M$ and $\log d_F$. The line drawn on the plot has slope about $b = 0.54$, so the power is $p = 1 - b = 1 - 0.54 = 0.46$. The nearest rung on the ladder of powers is $p = 0.5$, so I reexpressed blocked shots with roots. (The slope printed in the plot title, 0.8, comes from a line forced through the origin, so I used the slope of the drawn line.)
+
+#### a) Roots: 5-number summaries and fences
+
+```{r}
+nhl %>% mutate(roots = sqrt(BLK)) -> nhl
+```
+
+```{r}
+nhl %>%
+  group_by(Group) %>%
+  summarize(N  = n(),
+            LO = fivenum(roots)[1],
+            FL = fivenum(roots)[2],
+            M  = fivenum(roots)[3],
+            FU = fivenum(roots)[4],
+            HI = fivenum(roots)[5]) %>%
+  mutate(dF = FU - FL,
+         STEP = 1.5 * dF,
+         fence.lo = FL - STEP,
+         fence.hi = FU + STEP) -> root.summary
+root.summary
+```
+
+#### b) Roots: outside values
+
+```{r}
+nhl %>%
+  inner_join(root.summary, by = "Group") %>%
+  filter(roots < fence.lo | roots > fence.hi) %>%
+  select(Group, Player, BLK, roots)
+```
+
+#### c) Roots: parallel boxplots
+
+```{r}
+ggplot(nhl, aes(reorder(Group, roots, median), roots)) +
+  geom_boxplot() + coord_flip() +
+  xlab("Position") + ylab("Root blocked shots")
+```
+
+#### Was the transformation successful?
+
+i) Spread vs. level
+
+```{r}
+spread_level_plot(nhl, roots, Group)
+```
+
+ii) Fourth spreads
+
+```{r}
+tibble(Group = blk.summary$Group,
+       dF.raw = blk.summary$dF,
+       dF.roots = round(root.summary$dF, 3))
+```
+
+Yes. On the raw data, the fourth spreads ranged from 16 (wingers) to 38 (defensemen), and the largest was 2.4 times the smallest. On the root scale, the spreads are 1.43 to 1.87, a ratio of only 1.3.
+## C. Two-variable relationships
+
+### Shots on goal and goals
+
+```{r}
+ggplot(nhl, aes(SOG, G, color = Group)) + geom_point() +
+  xlab("Shots on goal") + ylab("Goals")
+fit <- rline(G ~ SOG, nhl, iter = 5)
+cbind(x = fit$spoints.x, y = fit$spoints.y)
+c(a = fit$a, b = fit$b, xC = fit$xC, half.slope.ratio = fit$half.slope.ratio)
+```
+
+The three summary points are (153, 24), (195, 29), and (242, 36). The half-slope ratio is 1.25, which is close to 1, so the plot is straight enough and doesn't need to be straightened. The resistant line is
+$$
+FIT = 29.35 + 0.130\,(SOG - 195).
+$$
+Every 10 extra shots are worth about **1.3 goals**, a conversion rate of about 13%. A player with the median number of shots (195) is expected to score about 29 goals.
+
+**Comparison with least squares.**
+
+```{r ls}
+ls.fit <- lm(G ~ SOG, data = nhl)
+coef(ls.fit)
+# Like the San Francisco example in the notes: make one value extreme and refit
+nhl.alt <- nhl
+nhl.alt$G[nhl.alt$Player == "Nathan MacKinnon"] <- 90
+rbind(resistant.original = c(fit$a - fit$b * fit$xC, fit$b),
+      resistant.changed = with(rline(G ~ SOG, nhl.alt, iter = 5),
+                               c(a - b * xC, b)),
+      ls.original = coef(ls.fit),
+      ls.changed = coef(lm(G ~ SOG, data = nhl.alt)))
+```
