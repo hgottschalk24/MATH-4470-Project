@@ -653,3 +653,54 @@ rbind(resistant.original = c(fit$a - fit$b * fit$xC, fit$b),
       ls.original = coef(ls.fit),
       ls.changed = coef(lm(G ~ SOG, data = nhl.alt)))
 ```
+## d) Age and the two-way table 
+
+### How does production change with age? 
+
+```{r}
+ggplot(nhl, aes(Age, PTS)) + geom_point() + geom_smooth(method = "loess", se = FALSE)
+
+ggplot(nhl, aes(AgeGroup, PTS)) + geom_boxplot() + coord_flip()
+
+nhl %>% group_by(AgeGroup) %>%
+  summarize(n = n(), Median = median(PTS), Spread = IQR(PTS))
+```
+
+There is no strong age trend. Median points are 69 (ages 22 and under), 68 (ages 23-26), 72 (ages 27-30), and 66 (ages 31 and over). Production peaks slightly in the late 20s, and the 31+ group has the lowest median and the tightest spread. Each difference is only a few points, small compared with the spread of about 15 points within each age group.
+
+### Do position and age both shape production? Is it additive? 
+
+```{r}
+# How many players are in each cell? 
+table(nhl$Pos3, nhl$AgeGroup)
+
+tab <- nhl %>%
+  group_by(Pos3, AgeGroup) %>% summarize(M = median(PTS), .groups = "drop") %>%
+  pivot_wider(names_from = AgeGroup, values_from = M) %>%
+  as.data.frame() %>% column_to_rownames("Pos3") %>% as.matrix()
+tab <- tab[, levels(nhl$AgeGroup)]
+tab
+
+# Additive fit
+pp <- medpolish(tab)
+pp
+
+# Additive fit plot
+plot2way(pp$row + pp$overall, pp$col, rownames(tab), colnames(tab))
+
+# Are the effects big compared to the residuals?
+round(c(row = range(pp$row), col = range(pp$col), resid = range(pp$residuals)), 2)
+
+# Comparison values
+cv <- outer(pp$row, pp$col, "*") / pp$overall
+df <- data.frame(cv = as.vector(cv), resid = as.vector(pp$residuals))
+ggplot(df, aes(cv, resid)) + geom_point() + geom_hline(yintercept = 0)
+rline(resid ~ cv, df)$b
+```
+
+The common value is about 69 points. Position effects are small (centers +1.9, wingers 0, defensemen -1.5). Age effects are about the same size or a bit larger: 31+ is -4.6 and ages 23-26 is +0.9, while the other two age groups are 0. So age matters somewhat more than position here, and neither is big. The residuals go up to +6.4 (wingers 27-30) and +6.1 (centers 31+), and down to -4.9 (centers 23-26). These are larger than most of the effects, so the additive model explains little of the table. Cells are small (defensemen have only 2 players in the 22-and-under and 31+ groups), so these conclusions are just exploratory.
+
+**Reading the additive fit plot.** The highest intersection is centers aged 23-26, with a fit of 69.1 + 1.9 + 0.9 = 71.9 points. The lowest is defensemen aged 31+, with a fit of 69.1 - 1.5 - 4.6 = 63.0 points. The row fits for the positions cover only 3.4 points (67.6 for defensemen to 71.0 for centers), while the age effects cover 5.5 points (-4.6 to +0.9). So the display is stretched more in the age direction than in the position direction, which agrees with the effects: age matters a little more than position.</mark>
+
+**Comparison values.** In the plot of residuals against comparison values, most points sit at a comparison value of 0, because two of the four age effects and the winger effect are 0. The few nonzero comparison values are all tiny (at most 0.13 in size), and the residuals show no $+/-$ quadrant pattern. So the slope from this plot is unstable and shouldn't be used to choose a power. We stay with the additive fit, and an extended fit or a log (multiplicative) fit isn't needed.</mark>
+
