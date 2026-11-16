@@ -698,6 +698,12 @@ ggplot(df, aes(cv, resid)) + geom_point() + geom_hline(yintercept = 0)
 rline(resid ~ cv, df)$b
 ```
 
+# Order rows and columns by their effects to look for the +/- quadrant pattern
+```{r}
+ordered.tab <- tab[order(pp$row), order(pp$col)]
+pp2 <- medpolish(ordered.tab, trace.iter = FALSE)
+pp2$residuals
+```
 The common value is about 69 points. Position effects are small (centers +1.9, wingers 0, defensemen -1.5). Age effects are about the same size or a bit larger: 31+ is -4.6 and ages 23-26 is +0.9, while the other two age groups are 0. So age matters somewhat more than position here, and neither is big. The residuals go up to +6.4 (wingers 27-30) and +6.1 (centers 31+), and down to -4.9 (centers 23-26). These are larger than most of the effects, so the additive model explains little of the table. Cells are small (defensemen have only 2 players in the 22-and-under and 31+ groups), so these conclusions are just exploratory.
 
 **Reading the additive fit plot.** The highest intersection is centers aged 23-26, with a fit of 69.1 + 1.9 + 0.9 = 71.9 points. The lowest is defensemen aged 31+, with a fit of 69.1 - 1.5 - 4.6 = 63.0 points. The row fits for the positions cover only 3.4 points (67.6 for defensemen to 71.0 for centers), while the age effects cover 5.5 points (-4.6 to +0.9). So the display is stretched more in the age direction than in the position direction, which agrees with the effects: age matters a little more than position.</mark>
