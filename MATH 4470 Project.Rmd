@@ -745,3 +745,27 @@ pp2$residuals
 **Comparison values.** With only two rows, the second row’s residuals are always the mirror image of the first row’s, so there is little pattern to find. The residual signs agree with the signs of the comparison values in only half the cells, and the comparison values are tiny (at most about 0.06). The fitted slope (k ≈ 15) would imply a power of about −14, which is meaningless, so we stay with the additive fit. A log or extended fit isn’t needed.
 
 **Answer to the question.** Both position and age shape production a little, but neither is large, and the effects are not purely additive because age affects defensemen and forwards differently.
+
+
+# 4. Conclusions
+**What does a typical player's point total look like, and who are the outliers?** A typical player scores about 70 points (median 70.5), and the middle half score between 62 and 80. The distribution is right-skewed. McDavid (138), Kucherov (130), MacKinnon (127), and Celebrini (115) are outliers, and McDavid is far out.
+
+**Do forwards and defensemen differ in scoring? Are the spreads unequal?** Forwards have a higher median than defensemen (71 vs. 64.5), but the boxes overlap a lot. The spreads are nearly equal (fourth-spreads of 18 and 17), so reexpression barely matters for points.
+
+**How strongly are shots on goal related to goals? Who over- or underperforms?** The relationship is moderately strong (r = 0.65), at about 1.3 goals per 10 extra shots. Johnston, Caulfield, Geekie, Stamkos, and Kucherov score the most above their shot volume. The five biggest underperformers are all defensemen. 
+
+**Does ice time predict points?** Across all players, only weakly (r = 0.27), because defensemen play the most minutes but score less. Among forwards, it's much stronger (r = 0.66), at roughly 7 more points per extra minute of ice time.
+
+**How does production change with age?** There's no strong age trend. Median points peak slightly at ages 27-30 (72) and are lowest for 31+ (66), but the differences are small compared to the spread within each group.
+
+**Do position and age both shape production? Is the effect additive?** Both matter a little and about equally (position effects +- 1.5, age effects from -2.75 to +0.75). The effect isn't purely additive: forwards stay productive with age while defensemen decline.
+
+**How well does a normal curve describe ice time, and where does it fall?** It fits the middle (19-21 minutes) well but fails at the ends. There are too many players at 17-19 and 24+ minutes and too few at 21-23. Ice time is really two groups mixed together: forwards, and a second bump of defensemen at 24+ minutes.
+
+**Most surprising finding: ** Defensemen play the most minutes but score the least relative to their ice time and shot volume. Every defenseman falls below the shots-vs-goals line, and the biggest misses are Hughes (-21) and Seider (-18). The reason is that they shoot at 4-9%, while the top forwards shoot at 19-22%.
+
+**Overall** 
+Revelation: The rootogram and hanging rootogram revealed that ice time is two groups mixed together, which is a histogram alone would not have shown. 
+Resistance: The resistance line didn't move when MacKinnon's goals were set to 90, while least squares did (slope 0.135 to 0.162). 
+Reexpression: It helped least for points, since the spreads were already equal and no power made them symmetric. It helped most for blocked shots, where roots cut the spread ratio from about 1.9 to 1.1. 
+Residuals: They helped most overall. They exposed that defensemen drive the shots and ice-time misfits, and that age affects forwards and defensemen differently. 
